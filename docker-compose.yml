@@ -5,7 +5,7 @@ x-app: &app
   restart: "no"
   env_file: ./config/app.env
   environment: &app-env
-    APP_HOST: "127.0.0.1"
+    APP_HOST: "0.0.0.0"
     APP_PORT: "8080"
     APP_MESSAGE: "Welcome to BARQ Systems"
   healthcheck:
@@ -51,12 +51,16 @@ services:
     environment:
       <<: *app-env
       INSTANCE_ID: "app-01"
+    ports: ["8081:8080"]
+
   app-02:
     <<: *app
     container_name: app-02
     environment:
       <<: *app-env
-      INSTANCE_ID: "app-01"
+      INSTANCE_ID: "app-02"
+    ports: ["8082:8080"]
+
   nginx:
     image: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
     container_name: nginx
