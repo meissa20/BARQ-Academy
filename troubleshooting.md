@@ -101,6 +101,51 @@ Keep chronological entries. Copy this block for each meaningful investigation.
   shows both app-01 and app-02 identities across repeated requests through
   NGINX (round-robin load balancing not yet tested).
 
+## Entry 4 / 2026-09-12 / 4:13
+- Symptom: app-01 and app-02 showed as (health: starting) indefinitely or
+  (unhealthy) in `docker ps`, despite the app responding correctly to manual
+  curl requests on /health.
+- Hypothesis: The Compose healthcheck probes a different path than the app
+  actually exposes.
+- Command or test:
+    grep -A6 healthcheck docker-compose.yml
+- Actual output:
+    test: ["CMD", "python", "-c", "import urllib.request;
+    urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)"]
+    (app/server.py only defines a route for /health, not /healthz)
+- Failed attempt and what changed your thinking:
+    Initially assumed the healthcheck failure was still related to the
+    APP_HOST bind issue (Entry 3), since that also caused connection
+    failures on similar-looking probes. Re-verified after that fix was
+    already applied and confirmed working via manual curl:
+        docker exec app-01 python3 -c "import urllib.request; \
+          print(urllib.request.urlopen('http://127.0.0.1:8080/health', \
+          timeout=2).status)"
+        -> 200
+    Since a direct request to /health succeeded but the container still
+    reported unhealthy, this ruled out networking/binding as the cause and
+    pointed at the healthcheck's own request path instead.
+- Root cause:
+    Compose healthcheck hit /healthz, but app/server.py only defines a
+    route for /health (no trailing 'z'). Every healthcheck attempt returned
+    404, which urllib.request treats as an HTTPError exception, causing the
+    healthcheck command to exit non-zero and Docker to mark the container
+    unhealthy indefinitely.
+- Fix:
+    Corrected the healthcheck test in docker-compose.yml's x-app anchor to
+    request http://127.0.0.1:8080/health instead of /healthz.
+- Retest evidence:
+    docker compose up -d --force-recreate app-01 app-02
+    docker ps
+    -> app-01   Up About a minute (healthy)
+    -> app-02   Up About a minute (healthy)
+    (full docker ps output also confirms postgres and redis healthy, and
+    nginx up and forwarding host 8080 -> container 80 correctly)
+- Related commit: 8adaf78
+- Remaining uncertainty: None — healthcheck path now matches the actual
+  route; both instances report healthy consistently across recreation.
+
+  
 ## Entry / date / time
 - Symptom:
 - Hypothesis:
