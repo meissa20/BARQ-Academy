@@ -11,3 +11,6 @@ evidence/local/
 backups/
 *.dump
 BARQ-ENV
+redis-data/
+database/init.sql
+config/*.env
