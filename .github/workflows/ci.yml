@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose syntax
+        run: docker compose config
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start the stack
+        run: docker compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            healthy_count=$(docker compose ps --format json | grep -o '"Health":"healthy"' | wc -l)
+            echo "Healthy services: $healthy_count"
+            if [ "$healthy_count" -ge 5 ]; then
+              echo "All services healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Timed out waiting for services to become healthy"
+          docker compose ps
+          exit 1
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run validation
+        run: python3 validate.py
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
